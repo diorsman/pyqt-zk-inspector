@@ -72,12 +72,15 @@ class MainWindow(QtGui.QMainWindow):
     for kid in kids:
       self.recurse_tree(os.path.join(path, kid), item)
 
-    if len(kids):
-      icon_file = '/usr/share/icons/gnome/16x16/mimetypes/package-x-generic.png'
-    else:
-      icon_file = '/usr/share/icons/gnome/16x16/mimetypes/text-x-generic.png'
+    root_icon_path = '/usr/share/icons/gnome/16x16/mimetypes'
 
-    item.setIcon(QtGui.QIcon(QtGui.QPixmap(icon_file)))
+    if len(kids):
+      icon_name = 'package-x-generic'
+    else:
+      icon_name = 'text-x-generic'
+
+    icon_file = os.path.join(root_icon_path, icon_name + '.png')
+    item.setIcon(QtGui.QIcon.fromTheme(icon_name, QtGui.QIcon(QtGui.QPixmap(icon_file))))
 
     parent.appendRow(item)
 
