@@ -15,6 +15,7 @@ class MainWindow(QtGui.QMainWindow):
     self.tree_model = QtGui.QStandardItemModel()
     self.tree_model.setHorizontalHeaderLabels(['Items'])
     self.ui = uic.loadUi('main.ui', self)
+    self.setWindowTitle('PyZK Inspector')
     self.ui.actionQuit.triggered.connect(self.quit)
     self.ui.connectButton.clicked.connect(self.connect)
     self.ui.znodesTree.setModel(self.tree_model)
