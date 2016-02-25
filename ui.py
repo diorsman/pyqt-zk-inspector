@@ -31,6 +31,7 @@ class MainWindow(QtGui.QMainWindow):
   def connect(self):
     if self.state.connected:
       self.state.disconnect()
+      self.tree_model.clear()
     else:
       try:
         host, port = self.ui.hostBox.text().trimmed().split(':')
