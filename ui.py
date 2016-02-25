@@ -32,7 +32,6 @@ class MainWindow(QtGui.QMainWindow):
   def connect(self):
     if self.state.connected:
       self.state.disconnect()
-      self.tree_model.clear()
     else:
       try:
         host, port = self.ui.hostBox.text().trimmed().split(':')
@@ -85,10 +84,9 @@ class MainWindow(QtGui.QMainWindow):
     parent.appendRow(item)
 
   def populate_tree(self):
-    if not self.state.connected:
-      print 'not connected'
-      return
-    self.recurse_tree('/', self.tree_model)
+    self.tree_model.clear()
+    if self.state.connected:
+      self.recurse_tree('/', self.tree_model)
 
   @QtCore.pyqtSlot(QtCore.QModelIndex)
   def tree_clicked(self, index):
@@ -110,15 +108,34 @@ class MainWindow(QtGui.QMainWindow):
 
     menu = QtGui.QMenu()
     menu.addAction('Create child of ' + path, lambda: self.create_child(path))
-    menu.addAction('Delete ' + path, lambda: self.delete_path(path))
+
+    if path != '/':
+      menu.addAction('Delete ' + path, lambda: self.delete_path(path))
 
     menu.exec_(self.znodesTree.viewport().mapToGlobal(position))
 
+  # XXX:
+  # - Refuse to work on /
+  # - Check for children; if there are, refuse or ask to confirm recursive
+  # - If individual file, copy the file locally and preserve "history"
+  # - Intelligently repopulate tree. Expand the parent of the leaf you killed,
+  #   but keep / highlighted
   def delete_path(self, path):
+    if path == '/':
+      QtGui.QMessageBox.critical(None, 'No', 'I refuse to delete /')
+      return
+    if not self.confirm_prompt('Are you sure?', 'Do you REALLY want to delete {0}?'.format(path)):
+      return
     print 'would delete ' + path
+    self.state.delete(path)
+    self.populate_tree()
 
   def create_child(self, path):
     print 'would create child of ' + path
+
+  def confirm_prompt(self, title, message):
+    result = QtGui.QMessageBox.question(self, title, message, QtGui.QMessageBox.Yes, QtGui.QMessageBox.No)
+    return result == QtGui.QMessageBox.Yes
 
 def main():
   signal.signal(signal.SIGINT, signal.SIG_DFL)

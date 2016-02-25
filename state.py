@@ -36,3 +36,6 @@ class ZkState:
       return self.zk.create(path, value)
     else:
       return self.zk.set(path, value)
+
+  def delete(self, path):
+    return self.zk.delete(path, -1, False)
