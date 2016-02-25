@@ -96,12 +96,24 @@ class MainWindow(QtGui.QMainWindow):
       print 'would spawn context for ' + path
 
   @QtCore.pyqtSlot(QtCore.QModelIndex)
-  def tree_menu(self, index):
+  def tree_menu(self, position):
     indexes = self.znodesTree.selectedIndexes()
     if not len(indexes):
       return
-    items = map(self.tree_model.itemFromIndex, indexes)
-    print items
+    item = self.tree_model.itemFromIndex(indexes[0])
+    path = item._path
+
+    menu = QtGui.QMenu()
+    menu.addAction('Create child of ' + path, lambda: self.create_child(path))
+    menu.addAction('Delete ' + path, lambda: self.delete_path(path))
+
+    menu.exec_(self.znodesTree.viewport().mapToGlobal(position))
+
+  def delete_path(self, path):
+    print 'would delete ' + path
+
+  def create_child(self, path):
+    print 'would create child of ' + path
 
 def main():
   signal.signal(signal.SIGINT, signal.SIG_DFL)
