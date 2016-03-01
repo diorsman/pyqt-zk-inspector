@@ -149,7 +149,9 @@ class MainWindow(QtGui.QMainWindow):
     item = self.tree_model.itemFromIndex(index)
     self.current_path = item._path
     contents = self.state.get_contents(self.current_path)
-    self.ui.textBox.setText(contents)
+
+    if contents:
+      self.ui.textBox.setText(contents)
 
     if QtGui.qApp.mouseButtons() & QtCore.Qt.RightButton:
       # print 'would spawn context for ' + self.current_path
