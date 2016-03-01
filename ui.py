@@ -2,10 +2,12 @@ import os
 import sys
 import signal
 from PyQt4 import QtGui, QtCore, uic
-from state import ZkState
-from config import ZkConfig, ZkConfigException
 from kazoo.exceptions import KazooException
 from kazoo.handlers.threading import TimeoutError
+
+from state import ZkState
+from config import ZkConfig, ZkConfigException
+from history import HistoryWindow
 
 
 class MainWindow(QtGui.QMainWindow):
@@ -20,11 +22,15 @@ class MainWindow(QtGui.QMainWindow):
     self.setWindowTitle('PyZK Inspector')
     self.ui.actionQuit.triggered.connect(self.quit)
     self.ui.connectButton.clicked.connect(self.connect)
+    self.ui.saveButton.clicked.connect(self.save)
+    self.ui.historyButton.clicked.connect(self.history)
     self.ui.znodesTree.setModel(self.tree_model)
     self.ui.znodesTree.clicked.connect(self.tree_clicked)
     self.ui.znodesTree.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
     self.ui.znodesTree.customContextMenuRequested.connect(self.tree_menu)
     self.update_widgets()
+    self.current_path = None
+    self.history_window = HistoryWindow(self.config, self)
 
   @QtCore.pyqtSlot()
   def quit(self):
@@ -67,6 +73,7 @@ class MainWindow(QtGui.QMainWindow):
   def update_widgets(self):
     if self.state.connected:
       self.ui.saveButton.setEnabled(True)
+      self.ui.historyButton.setEnabled(True)
       self.ui.connectButton.setText('Disconnect')
       self.ui.statusbar.showMessage('Connected to {0}:{1}'.format(self.state.host, self.state.port))
       self.ui.textBox.setReadOnly(False)
@@ -108,8 +115,8 @@ class MainWindow(QtGui.QMainWindow):
   @QtCore.pyqtSlot(QtCore.QModelIndex)
   def tree_clicked(self, index):
     item = self.tree_model.itemFromIndex(index)
-    path = item._path
-    contents = self.state.get_contents(path)
+    self.current_path = item._path
+    contents = self.state.get_contents(self.current_path)
     self.ui.textBox.setText(contents)
 
     if QtGui.qApp.mouseButtons() & QtCore.Qt.RightButton:
@@ -130,6 +137,37 @@ class MainWindow(QtGui.QMainWindow):
       menu.addAction('Delete ' + path, lambda: self.delete_path(path))
 
     menu.exec_(self.znodesTree.viewport().mapToGlobal(position))
+
+  @QtCore.pyqtSlot()
+  def save(self):
+    path = self.current_path
+
+    if not path:
+      QtGui.QMessageBox.warning(None, 'No file selected', 'Cannot save as no path is selected')
+      return
+
+    if not self.confirm_prompt('Are you sure?', 'Do you REALLY want to write to {0}?'.format(path)):
+      return
+
+    old_contents = self.state.get_contents(path).strip()
+    new_contents = str(self.ui.textBox.toPlainText())
+
+    if old_contents != '':
+      self.config.add_file_revision(path, old_contents)
+
+    self.state.set_contents(path, new_contents)
+
+  @QtCore.pyqtSlot()
+  def history(self):
+    path = self.current_path
+
+    if not path:
+      QtGui.QMessageBox.warning(None, 'No file selected', 'Cannot show history as no path is selected')
+      return
+
+    self.history_window.set_path(path)
+    self.history_window.populate_list(path)
+    self.history_window.show()
 
   # XXX:
   # - Refuse to work on /

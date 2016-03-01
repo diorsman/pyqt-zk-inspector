@@ -1,4 +1,5 @@
 import os
+import time
 import json
 import glob
 
@@ -48,17 +49,64 @@ class ZkConfig:
     except IOError as e:
       raise ZkConfigException('Failed writing "{0}": {1}'.format(self.connection_file, e))
 
+  def revision_path(self, path, rev=None):
+    path = path.strip().replace('/', '_')
+    if rev:
+      path += '-' + str(rev)
+    return os.path.join(self.revisions_dir, path)
+
   def add_file_revision(self, path, contents):
     if not self.config_dir:
       return
 
+    if contents == '':
+      return
+
+    path = self.revision_path(path, int(time.time()))
+
+    parent = os.path.dirname(path)
+
+    if not os.path.exists(parent):
+      os.makedirs(parent)
+
+    with open(path, 'w') as h:
+      h.write(contents)
+
   def list_file_revisions(self, path):
     if not self.config_dir:
       return {}
+    if path.startswith('/'):
+      path[1:]
+    if path == '':
+      return {}
+
+    paths = glob.glob(self.revision_path(path, '*'))
+
+    revisions = {}
+
+    for path in paths:
+      try:
+        date = int(path.split('-')[-1])
+      except ValueError:
+        continue
+      try:
+        revisions[date] = os.path.getsize(path)
+      except IOError:
+        continue
+
+    return revisions
 
   def get_file_revision(self, path, revision):
     if not self.config_dir:
       return False
+    path = self.revision_path(path, revision)
+    if not os.path.exists(path):
+      return ''
+    try:
+      with open(path, 'r') as h:
+        return h.read()
+    except IOError:
+      return ''
 
 
 class ZkConfigException(Exception):
