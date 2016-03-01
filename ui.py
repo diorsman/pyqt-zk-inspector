@@ -3,6 +3,7 @@ import sys
 import signal
 from PyQt4 import QtGui, QtCore, uic
 from state import ZkState
+from config import ZkConfig, ZkConfigException
 from kazoo.exceptions import KazooException
 from kazoo.handlers.threading import TimeoutError
 
@@ -11,6 +12,7 @@ class MainWindow(QtGui.QMainWindow):
 
   def __init__(self):
     super(MainWindow, self).__init__()
+    self.config = ZkConfig()
     self.state = ZkState()
     self.tree_model = QtGui.QStandardItemModel()
     self.tree_model.setHorizontalHeaderLabels(['Items'])
@@ -46,9 +48,21 @@ class MainWindow(QtGui.QMainWindow):
       except (TimeoutError, KazooException) as e:  
         QtGui.QMessageBox.critical(None, 'Failed connecting to ZK', str(e))
 
+      try:
+        self.config.add_connection(':'.join(map(str, [host, port])))
+      except ZkConfigException as e:
+        QtGui.QMessageBox.warning(None, 'Failed adding connection to history', str(e))
+
     self.update_widgets()
     if self.state.connected:
       self.populate_tree()
+
+  def populate_connection_history(self):
+    connections = self.config.get_connection_history()
+    if not connections:
+      return
+    self.ui.hostBox.clear()
+    self.ui.hostBox.addItems(connections)
 
   def update_widgets(self):
     if self.state.connected:
@@ -62,6 +76,7 @@ class MainWindow(QtGui.QMainWindow):
       self.ui.textBox.setReadOnly(True)
       self.ui.connectButton.setText('Connect')
       self.ui.statusbar.showMessage('Disconnected')
+    self.populate_connection_history()
 
   def recurse_tree(self, path, parent):
     item = QtGui.QStandardItem(os.path.basename(path) or '/')
