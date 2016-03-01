@@ -1,4 +1,4 @@
-from setuptools import setup, find_packages
+from setuptools import setup
 
 setup(name='qtinspector',
       version='0.0.1',
@@ -10,7 +10,8 @@ setup(name='qtinspector',
           ]
       },
 
-      # You can't install PyQt4 with pip/etc so I can't list it here
+      # You can't install PyQt4 with pip/etc so I can't list it here.
+      # Aside from that, all that's special is kazoo (zk library)
       install_requires=[
           'kazoo',
       ]
