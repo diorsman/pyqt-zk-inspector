@@ -132,8 +132,18 @@ class MainWindow(QtGui.QMainWindow):
     self.state.delete(path)
     self.populate_tree()
 
-  def create_child(self, path):
-    print 'would create child of ' + path
+  def create_child(self, parent):
+    result = QtGui.QInputDialog.getText(self, 'Child name', 'What child name under "{0}"?'.format(parent))
+    if not result[1]:
+      return
+    child = str(result[0]).strip()
+    if child.startswith('/'):
+      child = path[1:]
+    if child == '':
+      QtGui.QMessageBox.critical(None, 'No', 'Empty path. Give me something that doesn\'t start with /')
+      return
+    self.state.set_contents(os.path.join(parent, child), '')
+    self.populate_tree()
 
   def confirm_prompt(self, title, message):
     result = QtGui.QMessageBox.question(self, title, message, QtGui.QMessageBox.Yes, QtGui.QMessageBox.No)
