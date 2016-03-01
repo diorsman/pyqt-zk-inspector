@@ -55,9 +55,11 @@ class MainWindow(QtGui.QMainWindow):
       self.ui.saveButton.setEnabled(True)
       self.ui.connectButton.setText('Disconnect')
       self.ui.statusbar.showMessage('Connected to {0}:{1}'.format(self.state.host, self.state.port))
+      self.ui.textBox.setReadOnly(False)
     else:
       self.ui.saveButton.setEnabled(False)
       self.ui.historyButton.setEnabled(False)
+      self.ui.textBox.setReadOnly(True)
       self.ui.connectButton.setText('Connect')
       self.ui.statusbar.showMessage('Disconnected')
 
