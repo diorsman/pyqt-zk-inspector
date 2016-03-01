@@ -14,7 +14,6 @@ class MainWindow(QtGui.QMainWindow):
   def __init__(self):
     super(MainWindow, self).__init__()
 
-    self.setWindowTitle('PyZK Inspector')
     self.current_path = None
 
     # Localize our interfaces to our dotfiles and kazoo respectively
@@ -47,6 +46,7 @@ class MainWindow(QtGui.QMainWindow):
     self.history_window = HistoryWindow(self.config, self)
 
     self.update_widgets()
+    self.setWindowTitle('PyZK Inspector')
 
   @QtCore.pyqtSlot()
   def quit(self):
