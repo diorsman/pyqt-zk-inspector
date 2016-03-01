@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from qtinspector.mainwindow import main
+from qtinspector.cli import main
 
 
 if __name__ == '__main__':

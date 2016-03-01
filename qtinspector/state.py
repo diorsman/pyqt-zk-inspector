@@ -3,6 +3,8 @@ from kazoo.client import KazooClient
 
 
 class ZkState:
+  '''Maintain and abstract away our zookeeper kazoo connection'''
+
   def __init__(self):
     self.zk = None
     self.host = None
@@ -11,7 +13,7 @@ class ZkState:
   def connect(self, host, port):
     self.host = host
     self.port = port
-    self.zk =  KazooClient(hosts='{}:{}'.format(host, port), timeout=2)
+    self.zk = KazooClient(hosts='{}:{}'.format(host, port), timeout=2)
     self.zk.start()
 
   @property

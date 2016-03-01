@@ -1,6 +1,5 @@
 import os
 import sys
-import signal
 from PyQt4 import QtGui, QtCore, uic
 from kazoo.exceptions import KazooException
 from kazoo.handlers.threading import TimeoutError
@@ -11,26 +10,44 @@ from historywindow import HistoryWindow
 
 
 class MainWindow(QtGui.QMainWindow):
+  '''Our main window. This class effectively runs the entire app and delegates to other classes as needed'''
 
   def __init__(self):
     super(MainWindow, self).__init__()
+
+    self.setWindowTitle('PyZK Inspector')
+    self.current_path = None
+
+    # Localize our interfaces to our dotfiles and kazoo respectively
     self.config = ZkConfig()
     self.state = ZkState()
+
+    # Load our XML UI widget config
+    self.ui = uic.loadUi(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'ui/main.ui'), self)
+
+    # Our tree model controls the list of znodes on the left
     self.tree_model = QtGui.QStandardItemModel()
     self.tree_model.setHorizontalHeaderLabels(['Items'])
-    self.ui = uic.loadUi(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'ui/main.ui'), self)
-    self.setWindowTitle('PyZK Inspector')
+    self.ui.znodesTree.setModel(self.tree_model)
+
+    # When we click it, change the znode contents shown
+    self.ui.znodesTree.clicked.connect(self.tree_clicked)
+
+    # When we right click it, show options to create child or delete znode
+    self.ui.znodesTree.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+    self.ui.znodesTree.customContextMenuRequested.connect(self.tree_menu)
+
+    # Bind callbacks for clicks/etc
     self.ui.actionQuit.triggered.connect(self.quit)
     self.ui.connectButton.clicked.connect(self.connect)
     self.ui.saveButton.clicked.connect(self.save)
     self.ui.historyButton.clicked.connect(self.history)
-    self.ui.znodesTree.setModel(self.tree_model)
-    self.ui.znodesTree.clicked.connect(self.tree_clicked)
-    self.ui.znodesTree.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
-    self.ui.znodesTree.customContextMenuRequested.connect(self.tree_menu)
-    self.update_widgets()
-    self.current_path = None
+
+    # Keep a single object to refer to our history modal. It continues to get reconfigured,
+    # closed, and shown.
     self.history_window = HistoryWindow(self.config, self)
+
+    self.update_widgets()
 
   @QtCore.pyqtSlot()
   def quit(self):
@@ -48,10 +65,10 @@ class MainWindow(QtGui.QMainWindow):
         QtGui.QMessageBox.critical(None, 'Failed connecting to ZK', 'Format is host:port')
         self.update_widgets()
         return
-        
+
       try:
         self.state.connect(host, port)
-      except (TimeoutError, KazooException) as e:  
+      except (TimeoutError, KazooException) as e:
         QtGui.QMessageBox.critical(None, 'Failed connecting to ZK', str(e))
 
       try:
@@ -64,6 +81,7 @@ class MainWindow(QtGui.QMainWindow):
       self.populate_tree()
 
   def populate_connection_history(self):
+    '''Use our dotfile manager class to populate the editable dropdown with recent ZK connections'''
     connections = self.config.get_connection_history()
     if not connections:
       return
@@ -71,6 +89,7 @@ class MainWindow(QtGui.QMainWindow):
     self.ui.hostBox.addItems(connections)
 
   def update_widgets(self):
+    '''Change the state of our widgets (disabled/enabled/etc) depending on whether we\'re connected'''
     if self.state.connected:
       self.ui.saveButton.setEnabled(True)
       self.ui.historyButton.setEnabled(True)
@@ -86,17 +105,27 @@ class MainWindow(QtGui.QMainWindow):
     self.populate_connection_history()
 
   def recurse_tree(self, path, parent):
+    '''Recurse through the entire zookeeper tree to populate list on left'''
+    # XXX: this is extremely inefficient if you have at on of znodes. This needs to be
+    # rewritten to only parse when the znodes are expanded and not recurse forever
+
+    # Create a standard item which has the path name
     item = QtGui.QStandardItem(os.path.basename(path) or '/')
     item.setEditable(False)
+
+    # Sneakily add the path to this item, so we can refer to it later by the item object
+    # alone
     item._path = path
-    
+
     kids = self.state.get_kids(path)
-    
+
     for kid in kids:
       self.recurse_tree(os.path.join(path, kid), item)
 
+    # Stupid hacks to get some simple icons on linux
     root_icon_path = '/usr/share/icons/gnome/16x16/mimetypes'
 
+    # These names are standard and Qt might have them for us built in
     if len(kids):
       icon_name = 'package-x-generic'
     else:
@@ -108,22 +137,26 @@ class MainWindow(QtGui.QMainWindow):
     parent.appendRow(item)
 
   def populate_tree(self):
+    '''Empty list on left, then recursively parse zookeeper to built the tree anew'''
     self.tree_model.clear()
     if self.state.connected:
       self.recurse_tree('/', self.tree_model)
 
   @QtCore.pyqtSlot(QtCore.QModelIndex)
   def tree_clicked(self, index):
+    '''When we click the tree, find where we clicked and update textbox with the current znode'''
     item = self.tree_model.itemFromIndex(index)
     self.current_path = item._path
     contents = self.state.get_contents(self.current_path)
     self.ui.textBox.setText(contents)
 
     if QtGui.qApp.mouseButtons() & QtCore.Qt.RightButton:
-      print 'would spawn context for ' + path
+      # print 'would spawn context for ' + self.current_path
+      pass
 
   @QtCore.pyqtSlot(QtCore.QModelIndex)
   def tree_menu(self, position):
+    '''Create our context menu, which currenty lets you delete and create children of znodes'''
     indexes = self.znodesTree.selectedIndexes()
     if not len(indexes):
       return
@@ -136,10 +169,12 @@ class MainWindow(QtGui.QMainWindow):
     if path != '/':
       menu.addAction('Delete ' + path, lambda: self.delete_path(path))
 
+    # Spawn the context menu inside the treeview object where you clicked
     menu.exec_(self.znodesTree.viewport().mapToGlobal(position))
 
   @QtCore.pyqtSlot()
   def save(self):
+    '''When you click "Save", write contents in textbox to highlighted znode. Also save a backup.'''
     path = self.current_path
 
     if not path:
@@ -159,6 +194,7 @@ class MainWindow(QtGui.QMainWindow):
 
   @QtCore.pyqtSlot()
   def history(self):
+    '''Bring up history window for current znode, to view and revert to past saved revisions'''
     path = self.current_path
 
     if not path:
@@ -176,6 +212,7 @@ class MainWindow(QtGui.QMainWindow):
   # - Intelligently repopulate tree. Expand the parent of the leaf you killed,
   #   but keep / highlighted
   def delete_path(self, path):
+    '''When you right click a znode and do delete'''
     if path == '/':
       QtGui.QMessageBox.critical(None, 'No', 'I refuse to delete /')
       return
@@ -186,12 +223,13 @@ class MainWindow(QtGui.QMainWindow):
     self.populate_tree()
 
   def create_child(self, parent):
+    '''When you right click a znode and do create child, prompt for the child path to create and initialize it'''
     result = QtGui.QInputDialog.getText(self, 'Child name', 'What child name under "{0}"?'.format(parent))
     if not result[1]:
       return
     child = str(result[0]).strip()
     if child.startswith('/'):
-      child = path[1:]
+      child = child[1:]
     if child == '':
       QtGui.QMessageBox.critical(None, 'No', 'Empty path. Give me something that doesn\'t start with /')
       return
@@ -199,14 +237,6 @@ class MainWindow(QtGui.QMainWindow):
     self.populate_tree()
 
   def confirm_prompt(self, title, message):
+    '''Simple wrapper function that spawns a yes/no prompt and returns bool if they click yes'''
     result = QtGui.QMessageBox.question(self, title, message, QtGui.QMessageBox.Yes, QtGui.QMessageBox.No)
     return result == QtGui.QMessageBox.Yes
-
-def main():
-  signal.signal(signal.SIGINT, signal.SIG_DFL)
-  app = QtGui.QApplication(sys.argv)
-  window = MainWindow()
-  window.show()
-  if len(sys.argv) > 1:
-    window._load_map(sys.argv[1])
-  sys.exit(app.exec_())
