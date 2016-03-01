@@ -48,7 +48,8 @@ class HistoryWindow(QtGui.QDialog):
     if not self.path:
       return
     contents = str(self.revisionText.toPlainText())
-    self.mainwindow.ui.textBox.setText(contents)
+    if len(contents):
+      self.mainwindow.ui.textBox.setText(contents)
     self.close_window()
 
   def close_window(self):
