@@ -17,9 +17,13 @@ Simple interface to browsing and editing ZooKeeper from Python, leveraging Kazoo
 
 You need PyQt4 and Kazoo. PyQt4 is not installable via pip, but instead via your distribution's package manager.
 
+RHEL/Centos 6:
+
+    sudo yum install PyQt4 python-kazoo
+
 Debian/Ubuntu:
 
-    apt-get install python-qt4 python-kazoo
+    sudo apt-get install python-qt4 python-kazoo
     
 Mac:
 
