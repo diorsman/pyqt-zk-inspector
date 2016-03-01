@@ -46,7 +46,7 @@ class MainWindow(QtGui.QMainWindow):
     self.history_window = HistoryWindow(self.config, self)
 
     self.update_widgets()
-    self.setWindowTitle('PyZK Inspector')
+    self.setWindowTitle('QT-ZK Inspector')
 
   @QtCore.pyqtSlot()
   def quit(self):
