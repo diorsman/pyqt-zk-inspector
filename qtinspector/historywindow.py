@@ -1,3 +1,4 @@
+import os
 from PyQt4 import QtGui, QtCore, uic
 from datetime import datetime
 
@@ -10,7 +11,7 @@ class HistoryWindow(QtGui.QDialog):
     self.path = None
     self.config = config
     self.mainwindow = mainwindow
-    self.ui = uic.loadUi('history.ui', self)
+    self.ui = uic.loadUi(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'ui/history.ui'), self)
     self.list_model = QtGui.QStandardItemModel()
     self.list_model.setHorizontalHeaderLabels(['Revisions'])
     self.ui.revisionsList.setModel(self.list_model)

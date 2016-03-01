@@ -7,7 +7,7 @@ from kazoo.handlers.threading import TimeoutError
 
 from state import ZkState
 from config import ZkConfig, ZkConfigException
-from history import HistoryWindow
+from historywindow import HistoryWindow
 
 
 class MainWindow(QtGui.QMainWindow):
@@ -18,7 +18,7 @@ class MainWindow(QtGui.QMainWindow):
     self.state = ZkState()
     self.tree_model = QtGui.QStandardItemModel()
     self.tree_model.setHorizontalHeaderLabels(['Items'])
-    self.ui = uic.loadUi('main.ui', self)
+    self.ui = uic.loadUi(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'ui/main.ui'), self)
     self.setWindowTitle('PyZK Inspector')
     self.ui.actionQuit.triggered.connect(self.quit)
     self.ui.connectButton.clicked.connect(self.connect)
@@ -210,6 +210,3 @@ def main():
   if len(sys.argv) > 1:
     window._load_map(sys.argv[1])
   sys.exit(app.exec_())
-
-if __name__ == '__main__':
-  main()
