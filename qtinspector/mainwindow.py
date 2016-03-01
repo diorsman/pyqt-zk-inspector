@@ -2,7 +2,6 @@ import os
 import sys
 from PyQt4 import QtGui, QtCore, uic
 from kazoo.exceptions import KazooException
-from kazoo.handlers.threading import TimeoutError
 
 from state import ZkState
 from config import ZkConfig, ZkConfigException
@@ -68,7 +67,9 @@ class MainWindow(QtGui.QMainWindow):
 
       try:
         self.state.connect(host, port)
-      except (TimeoutError, KazooException) as e:
+
+      # Catching all exceptions as different versions of zk have different exception names
+      except Exception as e:
         QtGui.QMessageBox.critical(None, 'Failed connecting to ZK', str(e))
 
       try:
