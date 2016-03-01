@@ -17,9 +17,11 @@ class HistoryWindow(QtGui.QDialog):
     self.ui.loadButton.clicked.connect(self.load)
     self.ui.closeButton.clicked.connect(self.close_window)
     self.ui.revisionsList.clicked.connect(self.list_clicked)
+    self.setWindowTitle('History')
 
   def set_path(self, path):
     self.path = path
+    self.setWindowTitle('History of ' + path)
 
   @QtCore.pyqtSlot(QtCore.QModelIndex)
   def list_clicked(self, index):
