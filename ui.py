@@ -34,7 +34,7 @@ class MainWindow(QtGui.QMainWindow):
       self.state.disconnect()
     else:
       try:
-        host, port = self.ui.hostBox.text().trimmed().split(':')
+        host, port = self.ui.hostBox.currentText().trimmed().split(':')
         port = int(port)
       except (ValueError, TypeError):
         QtGui.QMessageBox.critical(None, 'Failed connecting to ZK', 'Format is host:port')
