@@ -132,8 +132,11 @@ class MainWindow(QtGui.QMainWindow):
     else:
       icon_name = 'text-x-generic'
 
-    icon_file = os.path.join(root_icon_path, icon_name + '.png')
-    item.setIcon(QtGui.QIcon.fromTheme(icon_name, QtGui.QIcon(icon_file)))
+    try:
+      icon_file = os.path.join(root_icon_path, icon_name + '.png')
+      item.setIcon(QtGui.QIcon.fromTheme(icon_name, QtGui.QIcon(icon_file)))
+    except AttributeError:
+      pass
 
     parent.appendRow(item)
 
