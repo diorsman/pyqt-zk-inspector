@@ -28,16 +28,24 @@ class ZkState:
       self.zk.close()
 
   def get_contents(self, path):
+    if not self.connected:
+      return ''
     return self.zk.get(path)[0]
 
   def get_kids(self, path):
+    if not self.connected:
+      return []
     return [os.path.join(path, item) for item in self.zk.get_children(path)]
 
   def set_contents(self, path, value):
+    if not self.connected:
+      return False
     if not self.zk.exists(path):
       return self.zk.create(path, value)
     else:
       return self.zk.set(path, value)
 
   def delete(self, path):
+    if not self.connected:
+      return False
     return self.zk.delete(path, -1, False)
