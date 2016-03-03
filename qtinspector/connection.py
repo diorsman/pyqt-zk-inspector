@@ -2,7 +2,7 @@ import os
 from kazoo.client import KazooClient
 
 
-class ZkState:
+class ZkConnection:
   '''Maintain and abstract away our zookeeper kazoo connection'''
 
   def __init__(self):

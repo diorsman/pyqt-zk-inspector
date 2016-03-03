@@ -3,7 +3,7 @@ import sys
 from PyQt4 import QtGui, QtCore, uic
 from kazoo.exceptions import KazooException
 
-from state import ZkState
+from connection import ZkConnection
 from config import ZkConfig, ZkConfigException
 from historywindow import HistoryWindow
 
@@ -18,7 +18,7 @@ class MainWindow(QtGui.QMainWindow):
 
     # Localize our interfaces to our dotfiles and kazoo respectively
     self.config = ZkConfig()
-    self.state = ZkState()
+    self.connection = ZkConnection()
 
     # Load our XML UI widget config
     self.ui = uic.loadUi(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'ui/main.ui'), self)
@@ -54,8 +54,8 @@ class MainWindow(QtGui.QMainWindow):
 
   @QtCore.pyqtSlot()
   def connect(self):
-    if self.state.connected:
-      self.state.disconnect()
+    if self.connection.connected:
+      self.connection.disconnect()
     else:
       try:
         host, port = self.ui.hostBox.currentText().trimmed().split(':')
@@ -66,7 +66,7 @@ class MainWindow(QtGui.QMainWindow):
         return
 
       try:
-        self.state.connect(host, port)
+        self.connection.connect(host, port)
 
       # Catching all exceptions as different versions of zk have different exception names
       except Exception as e:
@@ -78,7 +78,7 @@ class MainWindow(QtGui.QMainWindow):
         QtGui.QMessageBox.warning(None, 'Failed adding connection to history', str(e))
 
     self.update_widgets()
-    if self.state.connected:
+    if self.connection.connected:
       self.populate_tree()
 
   def populate_connection_history(self):
@@ -91,11 +91,11 @@ class MainWindow(QtGui.QMainWindow):
 
   def update_widgets(self):
     '''Change the state of our widgets (disabled/enabled/etc) depending on whether we\'re connected'''
-    if self.state.connected:
+    if self.connection.connected:
       self.ui.saveButton.setEnabled(True)
       self.ui.historyButton.setEnabled(True)
       self.ui.connectButton.setText('Disconnect')
-      self.ui.statusbar.showMessage('Connected to {0}:{1}'.format(self.state.host, self.state.port))
+      self.ui.statusbar.showMessage('Connected to {0}:{1}'.format(self.connection.host, self.connection.port))
       self.ui.textBox.setReadOnly(False)
     else:
       self.ui.saveButton.setEnabled(False)
@@ -118,7 +118,7 @@ class MainWindow(QtGui.QMainWindow):
     # alone
     item._path = path
 
-    kids = self.state.get_kids(path)
+    kids = self.connection.get_kids(path)
 
     for kid in kids:
       self.recurse_tree(os.path.join(path, kid), item)
@@ -143,7 +143,7 @@ class MainWindow(QtGui.QMainWindow):
   def populate_tree(self):
     '''Empty list on left, then recursively parse zookeeper to built the tree anew'''
     self.tree_model.clear()
-    if self.state.connected:
+    if self.connection.connected:
       self.recurse_tree('/', self.tree_model)
 
   @QtCore.pyqtSlot(QtCore.QModelIndex)
@@ -151,7 +151,7 @@ class MainWindow(QtGui.QMainWindow):
     '''When we click the tree, find where we clicked and update textbox with the current znode'''
     item = self.tree_model.itemFromIndex(index)
     self.current_path = item._path
-    contents = self.state.get_contents(self.current_path)
+    contents = self.connection.get_contents(self.current_path)
 
     if contents:
       self.ui.textBox.setText(contents)
@@ -190,13 +190,13 @@ class MainWindow(QtGui.QMainWindow):
     if not self.confirm_prompt('Are you sure?', 'Do you REALLY want to write to {0}?'.format(path)):
       return
 
-    old_contents = self.state.get_contents(path).strip()
+    old_contents = self.connection.get_contents(path).strip()
     new_contents = str(self.ui.textBox.toPlainText())
 
     if old_contents != '':
       self.config.add_file_revision(path, old_contents)
 
-    self.state.set_contents(path, new_contents)
+    self.connection.set_contents(path, new_contents)
 
   @QtCore.pyqtSlot()
   def history(self):
@@ -225,7 +225,7 @@ class MainWindow(QtGui.QMainWindow):
     if not self.confirm_prompt('Are you sure?', 'Do you REALLY want to delete {0}?'.format(path)):
       return
     print 'would delete ' + path
-    self.state.delete(path)
+    self.connection.delete(path)
     self.populate_tree()
 
   def create_child(self, parent):
@@ -239,7 +239,7 @@ class MainWindow(QtGui.QMainWindow):
     if child == '':
       QtGui.QMessageBox.critical(None, 'No', 'Empty path. Give me something that doesn\'t start with /')
       return
-    self.state.set_contents(os.path.join(parent, child), '')
+    self.connection.set_contents(os.path.join(parent, child), '')
     self.populate_tree()
 
   def confirm_prompt(self, title, message):
