@@ -1,7 +1,7 @@
 import os
 import sys
 from PyQt4 import QtGui, QtCore, uic
-from kazoo.exceptions import KazooException
+from PyQt4.QtCore import SIGNAL, pyqtSignal, pyqtSlot
 
 from connection import ZkConnection
 from config import ZkConfig, ZkConfigException
@@ -11,6 +11,61 @@ from historywindow import HistoryWindow
 class MainWindow(QtGui.QMainWindow):
   '''Our main window. This class effectively runs the entire app and delegates to other classes as needed'''
 
+  get_connection_status_signal = pyqtSignal(bool, bool, str)
+  get_contents_signal = pyqtSignal(str, str)
+  get_kids_signal = pyqtSignal(str, dict)
+
+  @pyqtSlot(bool, bool, str)
+  def receive_connection_status(self, connected, first, msg):
+    self.ui.connectBusyBar.hide()
+    self.thread_results['connected'] = connected
+    if not connected and msg:
+      QtGui.QMessageBox.critical(None, 'Failed connecting to ZK', msg)
+    if connected and first:
+      self.tree_path_items = {}
+      self.tree_model.clear()
+
+    self.update_widgets()
+
+  @pyqtSlot(str, str)
+  def receive_contents(self, path, contents):
+    if not contents:
+      contents = ''
+    self.ui.textBox.setText(str(contents))
+
+  @pyqtSlot(str, dict)
+  def receive_kids(self, parent, paths):
+    parent = str(parent)
+    for path, num_kids in paths.iteritems():
+      if path in self.tree_path_items:
+        continue
+      item = QtGui.QStandardItem(os.path.basename(path) or '/')
+      item.setEditable(False)
+      item._path = path
+      root_icon_path = '/usr/share/icons/gnome/16x16/mimetypes'
+      if num_kids:
+        icon_name = 'package-x-generic'
+      else:
+        icon_name = 'text-x-generic'
+      try:
+        icon_file = os.path.join(root_icon_path, icon_name + '.png')
+        item.setIcon(QtGui.QIcon.fromTheme(icon_name, QtGui.QIcon(icon_file)))
+      except AttributeError:
+        pass
+      self.tree_path_items[path] = {
+          'widget': item,
+      }
+      self.tree_path_items[path]['parent'] = self.tree_path_items[parent]
+      self.tree_path_items[parent]['widget'].appendRow(self.tree_path_items[path]['widget'])
+
+  def receive_set_contents(self, args):
+    print 'received set contents'
+    path, success = args
+
+  def receive_delete(self, args):
+    print 'received delete'
+    path, success = args
+
   def __init__(self):
     super(MainWindow, self).__init__()
 
@@ -18,7 +73,23 @@ class MainWindow(QtGui.QMainWindow):
 
     # Localize our interfaces to our dotfiles and kazoo respectively
     self.config = ZkConfig()
-    self.connection = ZkConnection()
+
+    self.connection = ZkConnection(self)
+    self.connection_thread = QtCore.QThread()
+    self.connection.moveToThread(self.connection_thread)
+    self.connection_thread.start()
+
+    # All of the threading callbacks...
+    self.get_connection_status_signal.connect(self.receive_connection_status)
+    self.get_contents_signal.connect(self.receive_contents)
+    self.get_kids_signal.connect(self.receive_kids)
+#    QObject.connect(self.connection, SIGNAL('give_set_contents()'), self.receive_set_contents, Qt.QueuedConnection)
+#    QObject.connect(self.connection, SIGNAL('give_delete()'), self.receive_delete, Qt.QueuedConnection)
+
+    # Stupid shit they set
+    self.thread_results = dict(
+        connected=False
+    )
 
     # Load our XML UI widget config
     self.ui = uic.loadUi(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'ui/main.ui'), self)
@@ -45,8 +116,12 @@ class MainWindow(QtGui.QMainWindow):
     # closed, and shown.
     self.history_window = HistoryWindow(self.config, self)
 
+    self.ui.connectBusyBar.hide()
+
     self.update_widgets()
     self.setWindowTitle('QT-ZK Inspector')
+
+    self.tree_path_items = {}
 
   @QtCore.pyqtSlot()
   def quit(self):
@@ -54,8 +129,8 @@ class MainWindow(QtGui.QMainWindow):
 
   @QtCore.pyqtSlot()
   def connect(self):
-    if self.connection.connected:
-      self.connection.disconnect()
+    if self.thread_results['connected']:
+      self.connection.disconnect_signal.emit()
     else:
       try:
         host, port = self.ui.hostBox.currentText().trimmed().split(':')
@@ -65,21 +140,14 @@ class MainWindow(QtGui.QMainWindow):
         self.update_widgets()
         return
 
-      try:
-        self.connection.connect(host, port)
-
-      # Catching all exceptions as different versions of zk have different exception names
-      except Exception as e:
-        QtGui.QMessageBox.critical(None, 'Failed connecting to ZK', str(e))
+      self.connection.connect_signal.emit([host, port])
+      self.ui.connectButton.setEnabled(False)
+      self.ui.connectBusyBar.show()
 
       try:
         self.config.add_connection(':'.join(map(str, [host, port])))
       except ZkConfigException as e:
         QtGui.QMessageBox.warning(None, 'Failed adding connection to history', str(e))
-
-    self.update_widgets()
-    if self.connection.connected:
-      self.populate_tree()
 
   def populate_connection_history(self):
     '''Use our dotfile manager class to populate the editable dropdown with recent ZK connections'''
@@ -91,12 +159,15 @@ class MainWindow(QtGui.QMainWindow):
 
   def update_widgets(self):
     '''Change the state of our widgets (disabled/enabled/etc) depending on whether we\'re connected'''
-    if self.connection.connected:
+    self.ui.connectButton.setEnabled(True)
+    if self.thread_results['connected']:
       self.ui.saveButton.setEnabled(True)
       self.ui.historyButton.setEnabled(True)
       self.ui.connectButton.setText('Disconnect')
       self.ui.statusbar.showMessage('Connected to {0}:{1}'.format(self.connection.host, self.connection.port))
       self.ui.textBox.setReadOnly(False)
+      if self.tree_model.rowCount() == 0:
+        self.populate_tree()
     else:
       self.ui.saveButton.setEnabled(False)
       self.ui.historyButton.setEnabled(False)
@@ -105,60 +176,32 @@ class MainWindow(QtGui.QMainWindow):
       self.ui.statusbar.showMessage('Disconnected')
     self.populate_connection_history()
 
-  def recurse_tree(self, path, parent):
-    '''Recurse through the entire zookeeper tree to populate list on left'''
-    # XXX: this is extremely inefficient if you have at on of znodes. This needs to be
-    # rewritten to only parse when the znodes are expanded and not recurse forever
-
-    # Create a standard item which has the path name
-    item = QtGui.QStandardItem(os.path.basename(path) or '/')
-    item.setEditable(False)
-
-    # Sneakily add the path to this item, so we can refer to it later by the item object
-    # alone
-    item._path = path
-
-    kids = self.connection.get_kids(path)
-
-    for kid in kids:
-      self.recurse_tree(os.path.join(path, kid), item)
-
-    # Stupid hacks to get some simple icons on linux
-    root_icon_path = '/usr/share/icons/gnome/16x16/mimetypes'
-
-    # These names are standard and Qt might have them for us built in
-    if len(kids):
-      icon_name = 'package-x-generic'
-    else:
-      icon_name = 'text-x-generic'
-
-    try:
-      icon_file = os.path.join(root_icon_path, icon_name + '.png')
-      item.setIcon(QtGui.QIcon.fromTheme(icon_name, QtGui.QIcon(icon_file)))
-    except AttributeError:
-      pass
-
-    parent.appendRow(item)
-
   def populate_tree(self):
     '''Empty list on left, then recursively parse zookeeper to built the tree anew'''
-    self.tree_model.clear()
-    if self.connection.connected:
-      self.recurse_tree('/', self.tree_model)
+    if not self.thread_results['connected']:
+      self.tree_path_items = {}
+      self.tree_model.clear()
+      return
+    self.connection.get_kids_signal.emit('/')
+    item = QtGui.QStandardItem('/')
+    item.setEditable(False)
+    item._path = '/'
+    self.tree_path_items['/'] = {
+        'widget': item
+    }
+    self.tree_model.appendRow(item)
 
   @QtCore.pyqtSlot(QtCore.QModelIndex)
   def tree_clicked(self, index):
     '''When we click the tree, find where we clicked and update textbox with the current znode'''
+    if not self.thread_results['connected']:
+      return
+
     item = self.tree_model.itemFromIndex(index)
     self.current_path = item._path
-    contents = self.connection.get_contents(self.current_path)
 
-    if contents:
-      self.ui.textBox.setText(contents)
-
-    if QtGui.qApp.mouseButtons() & QtCore.Qt.RightButton:
-      # print 'would spawn context for ' + self.current_path
-      pass
+    self.connection.get_contents_signal.emit(self.current_path)
+    self.connection.get_kids_signal.emit(self.current_path)
 
   @QtCore.pyqtSlot(QtCore.QModelIndex)
   def tree_menu(self, position):
@@ -190,23 +233,24 @@ class MainWindow(QtGui.QMainWindow):
     if not self.confirm_prompt('Are you sure?', 'Do you REALLY want to write to {0}?'.format(path)):
       return
 
+    print 'bailing from saving for now'
+    return
+
     old_contents = self.connection.get_contents(path).strip()
     new_contents = str(self.ui.textBox.toPlainText())
 
     if old_contents != '':
       self.config.add_file_revision(path, old_contents)
 
-    self.connection.set_contents(path, new_contents)
+    self.connection.emit(SIGNAL('set_contents()'), [path, new_contents])
 
   @QtCore.pyqtSlot()
   def history(self):
     '''Bring up history window for current znode, to view and revert to past saved revisions'''
     path = self.current_path
-
     if not path:
       QtGui.QMessageBox.warning(None, 'No file selected', 'Cannot show history as no path is selected')
       return
-
     self.history_window.set_path(path)
     self.history_window.populate_list(path)
     self.history_window.show()
@@ -224,9 +268,7 @@ class MainWindow(QtGui.QMainWindow):
       return
     if not self.confirm_prompt('Are you sure?', 'Do you REALLY want to delete {0}?'.format(path)):
       return
-    print 'would delete ' + path
-    self.connection.delete(path)
-    self.populate_tree()
+    self.connection.delete_signal.emit(path)
 
   def create_child(self, parent):
     '''When you right click a znode and do create child, prompt for the child path to create and initialize it'''
@@ -239,7 +281,8 @@ class MainWindow(QtGui.QMainWindow):
     if child == '':
       QtGui.QMessageBox.critical(None, 'No', 'Empty path. Give me something that doesn\'t start with /')
       return
-    self.connection.set_contents(os.path.join(parent, child), '')
+    path = os.path.join(parent, child)
+    self.connection.set_contents_signal.emit(path, '')
     self.populate_tree()
 
   def confirm_prompt(self, title, message):
