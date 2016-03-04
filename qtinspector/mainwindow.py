@@ -11,9 +11,12 @@ from historywindow import HistoryWindow
 class MainWindow(QtGui.QMainWindow):
   '''Our main window. This class effectively runs the entire app and delegates to other classes as needed'''
 
-  get_connection_status_signal = pyqtSignal(bool, bool, str)
-  get_contents_signal = pyqtSignal(str, str)
-  get_kids_signal = pyqtSignal(str, dict)
+  # Signals our worker thread hits us with
+  signal_get_connection_status = pyqtSignal(bool, bool, str)
+  signal_get_contents = pyqtSignal(str, str)
+  signal_get_kids = pyqtSignal(str, dict)
+  signal_show_error_prompt = pyqtSignal(str)
+  signal_reload_tree = pyqtSignal()
 
   @pyqtSlot(bool, bool, str)
   def receive_connection_status(self, connected, first, msg):
@@ -26,6 +29,10 @@ class MainWindow(QtGui.QMainWindow):
       self.tree_model.clear()
 
     self.update_widgets()
+
+  @pyqtSlot(str)
+  def show_error_prompt(self, msg):
+    QtGui.QMessageBox.critical(None, 'Failed connecting to ZK', msg)
 
   @pyqtSlot(str, str)
   def receive_contents(self, path, contents):
@@ -79,12 +86,12 @@ class MainWindow(QtGui.QMainWindow):
     self.connection.moveToThread(self.connection_thread)
     self.connection_thread.start()
 
-    # All of the threading callbacks...
-    self.get_connection_status_signal.connect(self.receive_connection_status)
-    self.get_contents_signal.connect(self.receive_contents)
-    self.get_kids_signal.connect(self.receive_kids)
-#    QObject.connect(self.connection, SIGNAL('give_set_contents()'), self.receive_set_contents, Qt.QueuedConnection)
-#    QObject.connect(self.connection, SIGNAL('give_delete()'), self.receive_delete, Qt.QueuedConnection)
+    # All of those threading callbacks...
+    self.signal_get_connection_status.connect(self.receive_connection_status)
+    self.signal_get_contents.connect(self.receive_contents)
+    self.signal_get_kids.connect(self.receive_kids)
+    self.signal_show_error_prompt.connect(self.show_error_prompt)
+    self.signal_reload_tree.connect(self.populate_tree)
 
     # Stupid shit they set
     self.thread_results = dict(
@@ -130,7 +137,7 @@ class MainWindow(QtGui.QMainWindow):
   @QtCore.pyqtSlot()
   def connect(self):
     if self.thread_results['connected']:
-      self.connection.disconnect_signal.emit()
+      self.connection.signal_disconnect.emit()
     else:
       try:
         host, port = self.ui.hostBox.currentText().trimmed().split(':')
@@ -140,7 +147,7 @@ class MainWindow(QtGui.QMainWindow):
         self.update_widgets()
         return
 
-      self.connection.connect_signal.emit([host, port])
+      self.connection.signal_connect.emit(host, port)
       self.ui.connectButton.setEnabled(False)
       self.ui.connectBusyBar.show()
 
@@ -178,11 +185,11 @@ class MainWindow(QtGui.QMainWindow):
 
   def populate_tree(self):
     '''Empty list on left, then recursively parse zookeeper to built the tree anew'''
+    self.tree_path_items = {}
+    self.tree_model.clear()
     if not self.thread_results['connected']:
-      self.tree_path_items = {}
-      self.tree_model.clear()
       return
-    self.connection.get_kids_signal.emit('/')
+    self.connection.signal_get_kids.emit('/')
     item = QtGui.QStandardItem('/')
     item.setEditable(False)
     item._path = '/'
@@ -200,12 +207,14 @@ class MainWindow(QtGui.QMainWindow):
     item = self.tree_model.itemFromIndex(index)
     self.current_path = item._path
 
-    self.connection.get_contents_signal.emit(self.current_path)
-    self.connection.get_kids_signal.emit(self.current_path)
+    self.connection.signal_get_contents.emit(self.current_path)
+    self.connection.signal_get_kids.emit(self.current_path)
 
   @QtCore.pyqtSlot(QtCore.QModelIndex)
   def tree_menu(self, position):
     '''Create our context menu, which currenty lets you delete and create children of znodes'''
+    if not self.thread_results['connected']:
+      return
     indexes = self.znodesTree.selectedIndexes()
     if not len(indexes):
       return
@@ -233,16 +242,13 @@ class MainWindow(QtGui.QMainWindow):
     if not self.confirm_prompt('Are you sure?', 'Do you REALLY want to write to {0}?'.format(path)):
       return
 
-    print 'bailing from saving for now'
-    return
-
-    old_contents = self.connection.get_contents(path).strip()
+    # old_contents = self.connection.get_contents(path).strip()
     new_contents = str(self.ui.textBox.toPlainText())
 
-    if old_contents != '':
-      self.config.add_file_revision(path, old_contents)
+    # if old_contents != '':
+    #  self.config.add_file_revision(path, old_contents)
 
-    self.connection.emit(SIGNAL('set_contents()'), [path, new_contents])
+    self.connection.signal_set_contents.emit(path, new_contents)
 
   @QtCore.pyqtSlot()
   def history(self):
@@ -268,7 +274,7 @@ class MainWindow(QtGui.QMainWindow):
       return
     if not self.confirm_prompt('Are you sure?', 'Do you REALLY want to delete {0}?'.format(path)):
       return
-    self.connection.delete_signal.emit(path)
+    self.connection.signal_delete.emit(path)
 
   def create_child(self, parent):
     '''When you right click a znode and do create child, prompt for the child path to create and initialize it'''
@@ -282,7 +288,7 @@ class MainWindow(QtGui.QMainWindow):
       QtGui.QMessageBox.critical(None, 'No', 'Empty path. Give me something that doesn\'t start with /')
       return
     path = os.path.join(parent, child)
-    self.connection.set_contents_signal.emit(path, '')
+    self.connection.signal_set_contents.emit(path, '')
     self.populate_tree()
 
   def confirm_prompt(self, title, message):
