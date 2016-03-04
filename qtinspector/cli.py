@@ -1,7 +1,20 @@
-from mainwindow import MainWindow
-from PyQt4 import QtGui
-import signal
 import sys
+import os
+
+try:
+  from PyQt4 import QtGui
+except ImportError:
+  # Tweak for mac/pip
+  extra_path = '/usr/local/lib/python2.7/site-packages'
+  if os.path.exists(extra_path):
+    sys.path.append(extra_path)
+  try:
+    from PyQt4 import QtGui
+  except ImportError:
+    raise
+
+import signal
+from mainwindow import MainWindow
 
 
 def main():
