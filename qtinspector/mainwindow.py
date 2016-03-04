@@ -65,14 +65,6 @@ class MainWindow(QtGui.QMainWindow):
       self.tree_path_items[path]['parent'] = self.tree_path_items[parent]
       self.tree_path_items[parent]['widget'].appendRow(self.tree_path_items[path]['widget'])
 
-  def receive_set_contents(self, args):
-    print 'received set contents'
-    path, success = args
-
-  def receive_delete(self, args):
-    print 'received delete'
-    path, success = args
-
   def __init__(self):
     super(MainWindow, self).__init__()
 
