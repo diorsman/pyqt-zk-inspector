@@ -194,6 +194,7 @@ class MainWindow(QtGui.QMainWindow):
   def tree_clicked(self, index):
     '''When we click the tree, find where we clicked and update textbox with the current znode'''
     if not self.thread_results['connected']:
+      self.ui.textBox.setText('')
       return
 
     item = self.tree_model.itemFromIndex(index)
