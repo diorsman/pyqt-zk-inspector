@@ -8,6 +8,7 @@ Simple interface to browsing and editing ZooKeeper from Python, leveraging Kazoo
 
 - Cross platform. Tested on Linux + mac
 - Keeps local history of your edits, so you can revert changes if they cause problems
+- Makes use of threads so the UI doesn't freeze when you connect and perform other actions
 
 ### Run
 
